@@ -8,9 +8,9 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.SecretKeySpec;
-import javax.xml.bind.DatatypeConverter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.security.*;
 import java.util.Map;
@@ -73,46 +73,50 @@ public class LocalEncryption {
         return "Java(TM) SE Runtime Environment".equals(System.getProperty("java.runtime.name"));
     }
 
-    public ByteArrayOutputStream encrypt(ByteArrayOutputStream Data) throws InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, IOException, BadPaddingException, IllegalBlockSizeException {
+    public byte[] encrypt(InputStream inputStream, byte[] keyBytes) throws InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, IOException, BadPaddingException, IllegalBlockSizeException {
         removeCryptographyRestrictions();
+        ByteArrayOutputStream data = new ByteArrayOutputStream();
 
-        byte[] b = generateKeyValue();
+        int i = 0;
+        while ((i = inputStream.read()) != -1) {
+            data.write((byte) i);
+        }
 
-        Key key = generateKey(b);
+        Key key = generateKey(keyBytes);
         Cipher c = Cipher.getInstance(algorithm);
         c.init(Cipher.ENCRYPT_MODE, key);
-        byte[] encVal = c.doFinal(Data.toByteArray());
+        byte[] encVal = c.doFinal(data.toByteArray());
         byte[] encryptedValue = new Base64().encode(encVal);
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        baos.write(encryptedValue);
+        return encryptedValue;
 
-        return baos;
     }
 
-    public ByteArrayOutputStream decrypt(ByteArrayOutputStream encryptedValue, String keyString) throws InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IOException, NoSuchPaddingException, NoSuchAlgorithmException {
+    public byte[] decrypt(InputStream inputStream, byte[] keyBytes) throws InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IOException, NoSuchPaddingException, NoSuchAlgorithmException {
         removeCryptographyRestrictions();
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ByteArrayOutputStream encryptedValue = new ByteArrayOutputStream();
 
-        byte[] keyByte = DatatypeConverter.parseHexBinary(keyString);
-        Key key = generateKey(keyByte);
+        int i = 0;
+        while ((i = inputStream.read()) != -1) {
+            encryptedValue.write((byte) i);
+        }
+
+        Key key = generateKey(keyBytes);
         Cipher c = Cipher.getInstance(algorithm);
         c.init(Cipher.DECRYPT_MODE, key);
         byte[] decodedValue = new Base64().decode(encryptedValue.toByteArray());
         byte[] decryptedVal = c.doFinal(decodedValue);
 
-        baos.write(decryptedVal);
+        return decryptedVal;
 
-        return baos;
     }
 
-    private byte[] generateKeyValue() throws IOException {
+    public byte[] generateKeyValue() throws IOException {
         byte[] b = new byte[32]; // 32*8=512 bit
         new Random().nextBytes(b);
 
         logger.info("AES Key size : " + b.length * 8);
-        logger.info("Use the following key for decryption.");
-        System.out.println(DatatypeConverter.printHexBinary(b));
+        logger.info("Generating .crypter.key file");
 
         return b;
     }

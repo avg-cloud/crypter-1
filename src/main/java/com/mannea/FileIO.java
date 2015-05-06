@@ -1,5 +1,8 @@
 package com.mannea;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.log4j.Logger;
+
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
@@ -12,25 +15,21 @@ import java.security.NoSuchAlgorithmException;
  */
 public class FileIO {
 
-// /Users/mannea/2014-05-14_10-52-38-939.log
-
+    Logger logger = Logger.getLogger(FileIO.class);
     LocalEncryption localEncryption = new LocalEncryption();
 
-
-    public void encryptFile(String path) throws IOException {
-
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        FileInputStream fileInputStream;
-
-        File file = new File(path);
-        fileInputStream = new FileInputStream(file);
-        int i = 0;
-        while ((i = fileInputStream.read()) != -1) {
-            byteArrayOutputStream.write((byte) i);
-        }
+    public void encryptFile(File file) {
 
         try {
-            byteArrayOutputStream = localEncryption.encrypt(byteArrayOutputStream);
+            InputStream originalFileInputStream = new FileInputStream(file);
+            byte[] keyByte = localEncryption.generateKeyValue();
+            FileOutputStream crypterKey = new FileOutputStream(new File(file.getAbsolutePath() + ".crypter.key"));
+            IOUtils.write(keyByte, crypterKey);
+            logger.info("Successfully generated " + file.getAbsolutePath() + ".crypter.key");
+
+            FileOutputStream encryptedFile = new FileOutputStream(new File(file.getAbsolutePath() + ".crypter"));
+            IOUtils.write(localEncryption.encrypt(originalFileInputStream, keyByte), encryptedFile);
+            logger.info("Successfully generated " + file.getAbsolutePath() + ".crypter");
         } catch (InvalidKeyException e) {
             e.printStackTrace();
         } catch (NoSuchPaddingException e) {
@@ -41,54 +40,55 @@ public class FileIO {
             e.printStackTrace();
         } catch (IllegalBlockSizeException e) {
             e.printStackTrace();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
-        FileOutputStream fileOutputStream = new FileOutputStream(path + ".crypter");
-        fileOutputStream.write(byteArrayOutputStream.toByteArray());
-        fileOutputStream.flush();
-
-        fileInputStream.close();
-        byteArrayOutputStream.close();
-        fileOutputStream.close();
     }
 
 
-    public void decryptFile(String path, String keyString) throws IOException {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        FileInputStream fileInputStream;
+    public void decryptFile(File file) throws IOException {
+        if (file.getAbsolutePath().endsWith(".crypter")) {
+            File keyFile = new File(file.getAbsolutePath() + ".key");
+            if (keyFile.exists() && !keyFile.isDirectory()) {
+                try {
+                    InputStream keyInputStream = new FileInputStream(keyFile);
+                    ByteArrayOutputStream keyBAOS = new ByteArrayOutputStream();
+                    int i = 0;
+                    while ((i = keyInputStream.read()) != -1) {
+                        keyBAOS.write((byte) i);
+                    }
+                    byte[] keyBytes = keyBAOS.toByteArray();
 
-        File file = new File(path);
-        fileInputStream = new FileInputStream(file);
-        int i = 0;
-        while ((i = fileInputStream.read()) != -1) {
-            byteArrayOutputStream.write((byte) i);
+                    String decryptedFileName = file.getAbsolutePath().substring(0, file.getAbsolutePath().length() - 8);
+                    InputStream encryptedInputStream = new FileInputStream(file);
+                    FileOutputStream decryptedFile = new FileOutputStream(new File(decryptedFileName));
+                    IOUtils.write(localEncryption.decrypt(encryptedInputStream, keyBytes), decryptedFile);
+                    logger.info("Successfully created unencrypted file " + file.getAbsolutePath());
+                } catch (InvalidKeyException e) {
+                    e.printStackTrace();
+                } catch (NoSuchPaddingException e) {
+                    e.printStackTrace();
+                } catch (NoSuchAlgorithmException e) {
+                    e.printStackTrace();
+                } catch (BadPaddingException e) {
+                    e.printStackTrace();
+                } catch (IllegalBlockSizeException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                logger.error("Could not find " + file.getAbsolutePath() + ".key");
+            }
+
+        } else {
+            logger.error("File is not a .crypter :: " + file.getAbsolutePath());
+            //Not .crypter
         }
-
-        try {
-            byteArrayOutputStream = localEncryption.decrypt(byteArrayOutputStream, keyString);
-        } catch (InvalidKeyException e) {
-            e.printStackTrace();
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (BadPaddingException e) {
-            e.printStackTrace();
-        } catch (IllegalBlockSizeException e) {
-            e.printStackTrace();
-        }
-
-        path = path.substring(0, path.length() - 8); //remove the .encrypter extension
-
-        FileOutputStream fileOutputStream = new FileOutputStream(path);
-        fileOutputStream.write(byteArrayOutputStream.toByteArray());
-        fileOutputStream.flush();
-
-        fileInputStream.close();
-        byteArrayOutputStream.close();
-        fileOutputStream.close();
 
     }
+
 }
 
 
